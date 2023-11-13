@@ -5,15 +5,15 @@ import json
 import subprocess
 import interactions
 import interactions.ext
+from typing import Dict, List
 from loguru import logger
 from decrypt import decrypt_token
 from interactions import OptionType, slash_option
-from interactions.api.events.discord import MessageCreate
 
 logger.info("initializing server...")
 TOKEN: str = decrypt_token()
 bot = interactions.Client(token=TOKEN)
-logger.info("defining functions...")
+logined_user: Dict[str, Dict[Dict, List[str]]] = {}
 
 def load_config(name):
     def decorator(function):
@@ -45,15 +45,15 @@ def load_config(name):
         return func
     return decorator
 
-
 @interactions.listen()
 async def on_startup():
     logger.info("bot is ready!")
     logger.info(f"bot owner: {bot.owner}")
     logger.info("press `Ctrl + C` to stop bot.")
-@interactions.listen(MessageCreate)
-async def on_message(event: MessageCreate):
-    logger.info(f"message received: {event.message.content}")
+@interactions.listen("on_message_create")
+async def on_message(event: interactions.events.MessageCreate):
+    message: interactions.Message = event.message
+    logger.info(f"message received: {message.content} from {message.author.username}")
     
 
 @interactions.slash_command(name="ping", description="测试与服务器的连接")

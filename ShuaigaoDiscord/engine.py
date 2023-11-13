@@ -33,6 +33,7 @@ class Youtube(SearchEngine):
             "--no-playlist", "--no-check-certificate", "--geo-bypass",
             "--flat-playlist", "--skip-download", "--quiet", "--ignore-errors"
         ]
+        # https://www.youtube.com/watch?v=fuM1aVCGR8c&list=RDfuM1aVCGR8c&start_radio=1
         try:
             result = subprocess.check_output(command).decode()
             videos: List[Dict] = [json.loads(line) for line in result.splitlines()]
