@@ -4,5 +4,8 @@
             "fileMatch": ["/ShuaigaoDiscord/src/configs/*.json"],
             "url": "/ShuaigaoDiscord/src/configs/.slash_option_schema.json"
         }
+    ],
+    "python.analysis.extraPaths": [
+        "./ShuaigaoDiscord"
     ]
 }

@@ -8,6 +8,7 @@ import interactions.ext
 from loguru import logger
 from decrypt import decrypt_token
 from interactions import OptionType, slash_option
+from interactions.api.events.discord import MessageCreate
 
 logger.info("initializing server...")
 TOKEN: str = decrypt_token()
@@ -43,11 +44,17 @@ def load_config(name):
             return function
         return func
     return decorator
-         
+
 
 @interactions.listen()
 async def on_startup():
-    logger.info("bot is running")
+    logger.info("bot is ready!")
+    logger.info(f"bot owner: {bot.owner}")
+    logger.info("press `Ctrl + C` to stop bot.")
+@interactions.listen(MessageCreate)
+async def on_message(event: MessageCreate):
+    logger.info(f"message received: {event.message.content}")
+    
 
 @interactions.slash_command(name="ping", description="测试与服务器的连接")
 @load_config("ping")
@@ -75,7 +82,7 @@ async def ping(ctx: interactions.SlashContext, ip: str, frequency: int = 10):
             out += output.strip() + "\n"
 
     rc = process.poll()
-    out += "\nping已结束"
+    out += "\nping已结束\nwebsocket 连接延迟: " + str(bot.latency) + "s"
 
     if len(out) >= 2000:
         out = out[:2000]
@@ -83,6 +90,7 @@ async def ping(ctx: interactions.SlashContext, ip: str, frequency: int = 10):
     await ctx.send(out)
     logger.info(f"end pinged {ip}")
     return rc
+
 
 
 logger.info("starting bot server...")
