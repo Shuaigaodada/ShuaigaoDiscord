@@ -1,0 +1,21 @@
+{
+    "args": [
+        {
+            "name": "ip",
+            "description": "ping服务器经行ping的ip",
+            "opt_type": "STRING",
+            "required": true,
+            "min_length": 7,
+            "max_length": 15
+        },
+        {
+            "name": "frequency",
+            "description": "执行次数",
+            "opt_type": "INTEGER",
+            "required": false,
+            "min_value": 1,
+            "max_value": 20
+        }
+    ]
+    
+}

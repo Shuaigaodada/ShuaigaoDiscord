@@ -1,6 +1,6 @@
 CC=python3
 INSTALLER=pip
-MODULES=yt-dlp validators discord-py-interactions
+MODULES=yt-dlp validators discord-py-interactions cryptography loguru
 PLAT=win-amd64
 
 install:
@@ -11,4 +11,9 @@ install:
 uninstall:
 	$(INSTALLER) uninstall $(MODULES)
 
-	
+env:
+	source env/bin/activate
+encode:
+	python3 ShuaigaoDiscord/encrypt.py
+run:
+	python3 ShuaigaoDiscord/server.py

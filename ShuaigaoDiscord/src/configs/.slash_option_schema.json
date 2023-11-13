@@ -1,0 +1,71 @@
+{
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "properties": {
+        "args": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "pattern": "^[a-z0-9_-]+$",
+                        "minLength": 1,
+                        "maxLength": 32
+                    },
+                    "description": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 100
+                    },
+                    "opt_type": {
+                        "type": "string",
+                        "enum": ["STRING", "INTEGER", "BOOLEAN", "USER", "CHANNEL", "ROLE", "MENTIONABLE", "NUMBER"]
+                    },
+                    "required": {
+                        "type": "boolean"
+                    },
+                    "autocomplete": {
+                        "type": "boolean"
+                    },
+                    "choices": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {
+                                    "type": "string"
+                                },
+                                "value": {
+                                    "type": ["string", "number"]
+                                }
+                            },
+                            "required": ["name", "value"]
+                        },
+                        "maxItems": 25
+                    },
+                    "channel_types": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": ["GUILD_TEXT", "DM", "GUILD_VOICE", "GROUP_DM", "GUILD_CATEGORY", "GUILD_NEWS", "GUILD_STORE", "GUILD_NEWS_THREAD", "GUILD_PUBLIC_THREAD", "GUILD_PRIVATE_THREAD", "GUILD_STAGE_VOICE"]
+                        }
+                    },
+                    "min_value": {
+                        "type": "number"
+                    },
+                    "max_value": {
+                        "type": "number"
+                    },
+                    "min_length": {
+                        "type": "integer"
+                    },
+                    "max_length": {
+                        "type": "integer"
+                    }
+                },
+                "required": ["name", "description", "opt_type"]
+            }
+        }
+    }
+}
