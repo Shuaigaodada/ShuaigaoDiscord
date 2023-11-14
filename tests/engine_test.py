@@ -1,8 +1,19 @@
 import sys
+import asyncio
 sys.path.append("./ShuaigaoDiscord")
 import engine
 
-results = engine.Youtube.search("我不配")
-print(results)
-path = engine.Youtube.download(results[0], "10032", "50043")
-print(path)
+class ctxTest:
+    async def send(*args, **kwargs):
+        print(args[0], end="\r", flush=True)
+        class TMessage:
+            async def edit(*args, **kwargs):
+                print(args[0], end="\r", flush=True)
+        return TMessage()
+
+async def main():
+    files = await engine.Youtube.playlist.download(ctxTest(), "https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", "081932", "3218952")
+    print(files)
+    print(len(files))
+
+asyncio.run(main())
