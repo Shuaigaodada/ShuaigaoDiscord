@@ -65,7 +65,7 @@ async def ping(ctx: interactions.SlashContext, ip: str, frequency: int = 10):
         return
     
     logger.info(f"start pinging {ip}")
-    await ctx.send(f"正在向 {ip} 发送ping请求")
+    message = await ctx.send(f"正在向 {ip} 发送ping请求")
     process = subprocess.Popen(
         ["ping", "-c", str(frequency), ip],
         stdout=subprocess.PIPE,
@@ -87,7 +87,7 @@ async def ping(ctx: interactions.SlashContext, ip: str, frequency: int = 10):
     if len(out) >= 2000:
         out = out[:2000]
 
-    await ctx.send(out)
+    await message.edit(out)
     logger.info(f"end pinged {ip}")
     return rc
 
