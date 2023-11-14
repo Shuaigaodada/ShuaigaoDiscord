@@ -3,6 +3,8 @@ from os.path import *
 from cryptography.fernet import Fernet
 
 dirpath = dirname(abspath(__file__))
+# 因为改动了位置因此更改dirpath，如果dirpath在ShuaigaoDiscord内则注释下面一行
+dirpath = join(dirname(dirpath), "ShuaigaoDiscord")
 class src:
     @staticmethod
     def create(path: str):
