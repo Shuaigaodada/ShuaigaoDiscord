@@ -1,7 +1,7 @@
 CC=python3
 INSTALLER=pip
-MODULES=yt-dlp validators discord-py-interactions cryptography loguru discord.py-interactions[voice] validators
-TOOLS=aria2c
+MODULES=yt-dlp validators discord-py-interactions cryptography loguru discord.py-interactions[voice]
+TOOLS=ffmpeg
 PLAT=win-amd64
 SERVERS=ShuaigaoDiscord/src/servers
 
