@@ -150,6 +150,9 @@ async def on_playlist_select(ctx: interactions.ComponentContext):
 
         if url:
             await engine.Youtube.playlist.download(message, url, server.id, server.user.id, name)
+    else:
+        musics: List[str] = server.user.lists(selected)
+        
 
 
 

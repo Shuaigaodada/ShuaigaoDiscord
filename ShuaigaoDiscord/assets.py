@@ -28,6 +28,9 @@ class User:
         path = os.path.join(self.path, name)
         os.makedirs(path, exist_ok=True)
         return path
+    
+    def lists(self, name: str):
+        return os.listdir(os.path.join(self.path, name))
 
     @property
     def playlist(self):
