@@ -3,6 +3,7 @@ import re
 import sys
 import time
 import json
+import asyncio
 import traceback
 import validators
 import subprocess
@@ -83,22 +84,24 @@ class Youtube(SearchEngine):
         
     class playlist:
         @staticmethod
-        async def download(ctx: SlashContext, url: str, server: str, user: str) -> List[str]:
+        async def download(message: Message, url: str, server: str, user: str, name: str) -> List[str]:
             # yt-dlp -f bestaudio --external-downloader aria2c -o "指定目录/%(title)s.%(ext)s" [播放列表URL]
             if not validators.url(url):
                 logger.error(f"Invalid url: {url}")
-                await ctx.send("提供的 URL 无效，请检查后重试。")
+                await message.edit(content="提供的 URL 无效，请检查后重试。")
                 return []
             
             engine = os.path.abspath(__file__)
             root = os.path.dirname(engine)
-            download_path = os.path.join(root, "src", "servers", server, user)
+            download_path = os.path.join(root, "src", "servers", server, user, name)
             os.makedirs(download_path, exist_ok=True)
             download_path = os.path.join(download_path, "%(title)s.%(ext)s")
             command = [
                 "yt-dlp", "-f", "ba",
                 "-x", "--audio-format", "mp3",
                 "--external-downloader", "aria2c",
+                "--external-downloader-args", "-x16 -k1M",
+                "--postprocessor-args", "-threads 8",
                 "-i", "-o", download_path, url
             ]
             # test: 
@@ -117,7 +120,7 @@ class Youtube(SearchEngine):
             output_files = []
 
             async def handle_output():
-                message = await ctx.send("开始导入歌单...")
+                await message.edit(content="开始导入歌单...")
                 for line in process.stdout:
                     print(line, end="", flush=True)
 
@@ -133,19 +136,23 @@ class Youtube(SearchEngine):
                         current_item, total_items = map(int, match.groups())
                         await Youtube.playlist._progress_update(message, current_item, total_items)
             try:
+                await message.edit(content="开始导入")
                 await handle_output()
                 process.wait()
+                await message.edit(content="已导入完成，重新调用 `/playlist` 命令来播放音乐")
                 return output_files
             except Exception as error:
                 logger.error(error)
                 traceback.print_exc()
-                await ctx.send(f"导入过程中发生错误: {error}")
+                await message.edit(content=f"导入过程中发生错误: {error}")
                 return []
             finally:
                 logger.info(f"Downloaded '{url}' playlist took {time.perf_counter() - start_time:.2f}s")
 
         @staticmethod
-        async def _progress_update(message: Message, current: int, total: int, length: int = 10) -> None:
+        async def _progress_update(message: Message, current: int, total: int, length: int = 20) -> None:
             progress: int = int((current / total) * length)
+            percent_complete: int = int((current / total) * 100)
             progress_bar: str = "🟩" * progress + "⬛" * (length - progress)
-            await message.edit(content=f"导入进度：\n{progress_bar}")
+            # 更新消息以显示百分比和进度条
+            await message.edit(content=f"导入进度：{percent_complete}% ({current}/{total})\n{progress_bar}")
