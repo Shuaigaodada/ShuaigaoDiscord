@@ -1,2 +1,24 @@
 using `virtualenv` create env
 source env/bin/activate
+
+command = [
+    "yt-dlp", video.url,
+    "-f", "bestaudio",
+    "--extract-audio", "--audio-format", "mp3",
+    "--write-thumbnail", "--write-info-json",
+    "--embed-thumbnail",  # 如果你想将封面图像嵌入到MP3文件中
+    "--add-metadata",  # 将视频元数据添加到MP3文件中
+    "-o", download_path,
+]
+
+
+
+command = [
+    "yt-dlp", video.url,
+    "--skip-download",
+    "--write-auto-sub",  # 尝试下载自动生成的字幕
+    "--write-sub",  # 尝试下载视频的字幕
+    "--write-description",  # 下载视频描述
+    "-o", download_path,
+    # ... 其他参数 ...
+]
