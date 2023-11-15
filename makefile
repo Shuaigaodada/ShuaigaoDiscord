@@ -26,3 +26,6 @@ unpack:
 	python3 ShuaigaoDiscord/unpack.py
 clean:
 	rm -rf ${SERVERS}
+assets_test:
+	python3 tests/assets_test.py
+
