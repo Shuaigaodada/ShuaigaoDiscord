@@ -12,8 +12,10 @@ class ctxTest:
         return TMessage()
 
 async def main():
-    files = await engine.Youtube.playlist.download(ctxTest(), "https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", "081932", "3218952")
-    print(files)
-    print(len(files))
+    # files = await engine.Youtube.playlist.download(ctxTest(), "https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", "081932", "3218952")
+    # print(files)
+    # print(len(files))
+    await engine.Youtube.playlist.Import("https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", 
+                                         "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/12345/laogao/JayChou.json")
 
 asyncio.run(main())
