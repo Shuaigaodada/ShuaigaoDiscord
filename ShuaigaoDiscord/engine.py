@@ -13,15 +13,35 @@ from interactions import SlashContext, Message
 
 class SearchEngine: pass
 class VideoData:
-    def __init__(self, title: str, url: str):
+    def __init__(self, title: str = "", url: str = "", description: str = None):
         self.title = title
         self.url = url
-
+        self.description = description
+        self.image = None
+        self.duration: str = None
+    
+    def load(self, data: Dict) -> "VideoData":
+        self.title = data.get("title", "N/A")
+        self.url = data.get("webpage_url", "N/A")
+        self.description = data.get("description", "N/A")
+        self.image = data.get("thumbnails", "N/A")
+        self.duration = data.get("duration_string", "N/A")
+        return self
+    
     def __repr__(self):
         return f"<VideoData {self.title} - {self.url}>"
     
     def get(self, key: str) -> str:
         return getattr(self, key)
+
+    def to_dict(self):
+        return {
+            "title": self.title,
+            "url": self.url,
+            "description": self.description,
+            "image": self.image,
+            "duration": self.duration
+        }
 
 
 class Youtube(SearchEngine):
@@ -84,18 +104,14 @@ class Youtube(SearchEngine):
         
     class playlist:
         @staticmethod
-        async def download(message: Message, url: str, server: str, user: str, name: str) -> List[str]:
+        async def download(message: Message, url: str, server: str) -> List[str]:
             # yt-dlp -f bestaudio --external-downloader aria2c -o "指定目录/%(title)s.%(ext)s" [播放列表URL]
             if not validators.url(url):
                 logger.error(f"Invalid url: {url}")
                 await message.edit(content="提供的 URL 无效，请检查后重试。")
                 return []
-            
-            engine = os.path.abspath(__file__)
-            root = os.path.dirname(engine)
-            download_path = os.path.join(root, "src", "servers", server, user, name)
-            os.makedirs(download_path, exist_ok=True)
-            download_path = os.path.join(download_path, "%(title)s.%(ext)s")
+
+            download_path = os.path.join(server, "%(title)s.%(ext)s")
             command = [
                 "yt-dlp", "-f", "ba",
                 "-x", "--audio-format", "mp3",
@@ -120,7 +136,7 @@ class Youtube(SearchEngine):
             output_files = []
 
             async def handle_output():
-                await message.edit(content="开始导入歌单...")
+                await message.edit(content="开始下载列表...")
                 for line in process.stdout:
                     print(line, end="", flush=True)
 
@@ -136,15 +152,15 @@ class Youtube(SearchEngine):
                         current_item, total_items = map(int, match.groups())
                         await Youtube.playlist._progress_update(message, current_item, total_items)
             try:
-                await message.edit(content="开始导入")
+                await message.edit(content="开始下载")
                 await handle_output()
                 process.wait()
-                await message.edit(content="已导入完成，重新调用 `/playlist` 命令来播放音乐")
+                await message.edit(content="下载完成") # TODO show user next command
                 return output_files
             except Exception as error:
                 logger.error(error)
                 traceback.print_exc()
-                await message.edit(content=f"导入过程中发生错误: {error}")
+                await message.edit(content=f"下载过程中发生错误: {error}")
                 return []
             finally:
                 logger.info(f"Downloaded '{url}' playlist took {time.perf_counter() - start_time:.2f}s")
@@ -155,4 +171,37 @@ class Youtube(SearchEngine):
             percent_complete: int = int((current / total) * 100)
             progress_bar: str = "🟩" * progress + "⬛" * (length - progress)
             # 更新消息以显示百分比和进度条
-            await message.edit(content=f"导入进度：{percent_complete}% ({current}/{total})\n{progress_bar}")
+            await message.edit(content=f"下载进度：{percent_complete}% ({current}/{total})\n{progress_bar}")
+
+        @staticmethod
+        async def Import(url: str, path: str) -> None:
+            code = "utf-8"
+            logger.info(f"start importing {url}")
+            command = [
+                "yt-dlp",
+                "--flat-playlist",
+                "--dump-json",
+                url
+            ]
+
+            try:
+                process = await asyncio.create_subprocess_exec(
+                    *command, 
+                    stdout=subprocess.PIPE, 
+                    stderr=subprocess.PIPE
+                )
+                stdout, stderr = await process.communicate()
+                if stderr:
+                    raise Exception(stderr.decode(code))
+                videos_list: List[Dict] = [json.loads(line) for line in stdout.decode(code).splitlines()]
+                videos: Dict[str, Dict] = {v.get("title", "N/A"): VideoData().load(v).to_dict() for v in videos_list}
+                videos["url"] = url
+
+                with open(path, "w") as file:
+                    json.dump(videos, file, ensure_ascii=False, indent=4)
+                
+                logger.info("import done")
+            except subprocess.CalledProcessError as error:
+                logger.error(error)
+                
+
