@@ -21,6 +21,8 @@ TOKEN: str = decrypt_token()
 bot = interactions.Client(token=TOKEN)
 logined_user: Dict[str, Dict[Dict, List[str]]] = {}
 
+temp: Dict[str, Dict] = dict()
+
 def load_config(name):
     def decorator(function):
         path = os.path.abspath(__file__)
@@ -97,15 +99,18 @@ async def ping(ctx: SlashContext, ip: str, frequency: int = 10):
     logger.info(f"end pinged {ip}")
     return rc
 
+
+
+
 @interactions.slash_command(name="playlist", description="列出用户的所有播放列表")
 async def playlist(ctx: SlashContext):
     server_id: str = str(ctx.guild_id)
     user_id: str = str(ctx.author.id)
 
-    server = assets.Server(server_id)
-    server.user(user_id)
+    asset = assets.Assets()
+    
 
-    playlists = server.user.playlist
+    playlists = asset.server(server_id).user(user_id).lists(False)
     if not playlists:
         logger.info(f"didn't find any playlist from user '{ctx.author.username}'")
         
@@ -120,20 +125,18 @@ async def playlist(ctx: SlashContext):
         placeholder="选择一个播放列表",
         min_values=1,
         max_values=1,
-        custom_id="select_playlist"
+        custom_id=command.select_list
     )
 
     # 发送消息并附加选择菜单
     await ctx.send("请选择一个播放列表:", components=select_menu)
-    select_menu.disabled = True
 
-@interactions.component_callback("select_playlist")
+@interactions.component_callback(command.select_list)
 async def on_playlist_select(ctx: interactions.ComponentContext):
     server_id: str = str(ctx.guild_id)
     user_id: str = str(ctx.author.id)
 
-    server = assets.Server(server_id)
-    server.user(user_id)
+    server = assets.Assets().server(server_id)
     # 处理用户的选择
     selected = ctx.values[0]
     if selected == command.add_playlist:
@@ -142,18 +145,43 @@ async def on_playlist_select(ctx: interactions.ComponentContext):
         modal_ctx: ModalContext = await ctx.bot.wait_for_modal(modal.PlaylistModal)
         await modal_ctx.send("创建播放列表完成", ephemeral=True)
 
-        name = modal_ctx.responses["playlist_name"]
-        url  = modal_ctx.responses["playlist_url"]
-        server.user.create(name)
-
-        message: Message = await ctx.send(content="正在准备导入播放列表...")
+        name = modal_ctx.responses[command.list_name]
+        url  = modal_ctx.responses[command.list_url]
+        message: Message = await ctx.send(content="正在导入播放列表...")
 
         if url:
-            await engine.Youtube.playlist.download(message, url, server.id, server.user.id, name)
+            await engine.Youtube.playlist.Import(url, server.user(user_id).join(name + ".json"))
+            download_Button = interactions.Button(
+                style=interactions.ButtonStyle.GREEN,
+                label="下载列表!",
+                custom_id=command.download_list
+            )
+            temp[command.download_list] = url
+            await message.edit(content="播放列表导入完成!重新调用 `/playlist` 来播放音乐\n", components=download_Button)
     else:
-        musics: List[str] = server.user.lists(selected)
+        musics: List[str] = server.user(user_id).lists(selected)
         
+@interactions.component_callback(command.download_list)
+async def on_download_list(ctx: interactions.ComponentContext):
+    await ctx.send_modal(modal=modal.CheckVIPModal)
+    modal_ctx: ModalContext = await ctx.bot.wait_for_modal(modal.CheckVIPModal)
 
+    username = modal_ctx.responses[command.vip_username]
+    password = modal_ctx.responses[command.vip_password]
+    await modal_ctx.send("登入成功!", ephemeral=True)
+
+    asset = assets.Assets()
+    with open(asset.src.file("VIP.json"), "r") as file:
+        db = json.load(file)
+    if username in db:
+        if password == db[username]:
+            message: Message = await ctx.send(content="正在准备下载中...")
+            await engine.Youtube.playlist.download(message, temp[command.download_list], asset.server(ctx.guild_id).join("temp"))
+            temp.pop(command.download_list)
+        else:
+            await modal_ctx.send("账号或密码错误。", ephemeral=True)
+    else:
+        await modal_ctx.send("账号或密码错误。", ephemeral=True)
 
 
 logger.info("starting bot server...")
