@@ -22,3 +22,5 @@ command = [
     "-o", download_path,
     # ... 其他参数 ...
 ]
+
+yt-dlp https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj --flat-playlist --dump-json
