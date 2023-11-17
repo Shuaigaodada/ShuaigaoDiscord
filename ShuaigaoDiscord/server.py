@@ -67,24 +67,24 @@ async def on_message(event: MessageCreate):
     message: Message = event.message
     logger.info(f"message received: {message.content} from {message.author.username}")
     
-@interactions.slash_command(name="play", description="test now")
-async def play(ctx: SlashContext):
-    v = engine.VideoData("周杰倫 Jay Chou【手寫的從前 Handwritten Past】Official MV", "", 
-                         """這種抒情歌充滿了濃濃的純愛風，以「手寫」來表達校園的初戀，手寫的情書，傳遞的青春的溫度與純粹；令人嚮往；而這首歌最特別的就是第一遍以簡單的鋼琴伴奏，襯著周杰倫輕輕吟唱，彷彿在空盪的校園教室裡，安靜回憶著當時的初戀情景；間奏之後二段主歌截然不同，讓人意想不到，鼓聲一進之後曲風變饒舌，彷彿將時空拉回到初戀現場，那個曾經一起彈琴的公園、糖果店的青澀微甜。""",
-                         )
-    v.image = "https://i.ytimg.com/vi/TMB6-YflpA4/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBENbuP3hYg2gK8cvZ_n5VtBugnbw"
-    asset = assets.Assets()
-    server = ctx.guild_id
-    v.duration = "4:55"
-    duration = v.duration.split(":")
-    duration = int(duration[0]) * 60 + int(duration[1])
-    config: Dict = {
-        "music-path": "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/1127926865198321748/temp/周杰倫 Jay Chou【手寫的從前 Handwritten Past】Official MV.mp3",
-        "duration": duration
-    }
-    with open(asset.server(server).join("temp", "playing.json"), "w") as file:
-        json.dump(config, file)
-    await playMusic(ctx, v)
+@interactions.slash_command(name="play", description="搜索并播放选择的音乐")
+@load_config("play")
+async def play(ctx: SlashContext, query: str, max_resluts: int = 5):
+    logger.info(f"start searching {query}, command auother: {ctx.author.username}")
+    results: List[engine.VideoData] = await engine.Youtube.search(query, max_resluts)
+    names: List[str] = [res.title for res in results]
+    logger.info(f"results: {names}")
+    select_menu = StringSelectMenu(
+        *names,
+        placeholder="选择想要播放的音乐",
+        min_values=1,
+        max_values=1,
+        custom_id=command.select_music
+    )
+    if str(ctx.author.id) not in temp:
+        temp[str(ctx.author.id)] = {}
+    temp[str(ctx.author.id)]["play_result"] = results
+    await ctx.send(content="请选择想要播放的音乐:", components=select_menu)
 
 @interactions.slash_command(name="ping", description="测试与服务器的连接")
 @load_config("ping")
@@ -157,7 +157,7 @@ async def playMusic(ctx: SlashContext, video: engine.VideoData):
         description="介绍: " + video.description,
         color=random.randint(0, 0xFFFFFF)
     )
-    embed.set_image(video.image)
+    embed.set_image(video.image[-1]["url"])
     asset = assets.Assets()
     server = ctx.guild_id
     with open(asset.server(server).join("temp", "playing.json"), "r") as file:
@@ -174,7 +174,7 @@ async def playMusic(ctx: SlashContext, video: engine.VideoData):
         else:
             await ctx.author.voice.channel.connect()
     
-    threading.Thread(target=audio.pre_buffer, args=(4.5, ), daemon=True).start()
+    audio.pre_buffer(4.5)
     message = await ctx.send(embeds=embed, components=userui.get_action())
     
     await ctx.voice_state.play(audio)
