@@ -1,0 +1,21 @@
+{
+    "args": [
+        {
+            "name": "query",
+            "description": "搜索的关键字",
+            "required": true,
+            "opt_type": "STRING",
+            "max_length": 100,
+            "min_length": 1,
+            "autocomplete": true
+        },
+        {
+            "name": "max_results",
+            "description": "返回的搜索结果的数量",
+            "required": false,
+            "opt_type": "INTEGER",
+            "max_value": 10,
+            "min_value": 1
+        }
+    ]
+}
