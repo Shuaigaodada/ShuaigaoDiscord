@@ -17,8 +17,8 @@ class VideoData:
         self.title = title
         self.url = url
         self.description = description
-        self.image = None
-        self.duration: str = None
+        self.image: List[Dict[str, int]] = None
+        self.duration: int = None
     
     def load(self, data: Dict) -> "VideoData":
         self.title = data.get("title", "N/A")
@@ -27,6 +27,22 @@ class VideoData:
         self.image = data.get("thumbnails", "N/A")
         self.duration = data.get("duration_string", "N/A")
         return self
+    
+    async def fill_info(self):
+        command = ["yt-dlp", "-J", self.url]
+        try:
+            result = subprocess.check_output(command).decode()
+            data = json.loads(result)
+            self.load(data)
+            return
+        except Exception as e:
+            logger.error(e)
+            raise e
+            
+    
+    @staticmethod
+    def load(data: Dict) -> "VideoData":
+        return VideoData().load(data)
     
     def __repr__(self):
         return f"<VideoData {self.title} - {self.url}>"
@@ -52,7 +68,7 @@ class Youtube(SearchEngine):
         command = [
             "yt-dlp",
             "ytsearch{}:{}".format(max_results, query),
-            "--dump-json", 
+            "-J", 
             "--default-search", "ytsearch",
             "--no-playlist", "--no-check-certificate", "--geo-bypass",
             "--flat-playlist", "--skip-download", "--quiet", "--ignore-errors"
@@ -63,10 +79,7 @@ class Youtube(SearchEngine):
             videos: List[Dict] = [json.loads(line) for line in result.splitlines()]
             simplified_results: List[VideoData] = []
             for video in videos:
-                simplified_results.append(VideoData(
-                    video.get("title", "N/A"),
-                    video.get("webpage_url", "N/A")
-                ))
+                simplified_results.append(VideoData.load(video))
             return simplified_results
         except Exception as error:
             logger.error(error)
@@ -75,13 +88,13 @@ class Youtube(SearchEngine):
             logger.info(f"Searching for '{query}' took {time.perf_counter() - start_time:.2f}s")
 
     @staticmethod
-    async def download(video: VideoData, server: str, user: str) -> str: # return path
+    async def download(video: VideoData, server: str) -> str: # return path
         if not validators.url(video.url):
             logger.error(f"{video.url} is not a real url")
             return ""
         engine = os.path.abspath(__file__)
         root = os.path.dirname(engine)
-        download_path = os.path.join(root, "src", "servers", server, user, video.title + ".mp3")
+        download_path = os.path.join(root, "src", "servers", server, "temp", video.title + ".mp3")
         os.makedirs(os.path.dirname(download_path), exist_ok=True)
         
         
@@ -121,7 +134,7 @@ class Youtube(SearchEngine):
                 "-i", "-o", download_path, url
             ]
             # test: 
-            # yt-dlp -f ba -x --audio-format mp3 -i -o "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/081932/3218952/%(title)s.%(ext)s" https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj
+            # yt-dlp -f 'ba' -x --audio-format mp3 -i -o "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/081932/3218952/%(title)s.%(ext)s" https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj
             start_time = time.perf_counter()
             process = subprocess.Popen(
                 command,
@@ -180,7 +193,7 @@ class Youtube(SearchEngine):
             command = [
                 "yt-dlp",
                 "--flat-playlist",
-                "--dump-json",
+                "-J",
                 url
             ]
 
@@ -194,7 +207,7 @@ class Youtube(SearchEngine):
                 if stderr:
                     raise Exception(stderr.decode(code))
                 videos_list: List[Dict] = [json.loads(line) for line in stdout.decode(code).splitlines()]
-                videos: Dict[str, Dict] = {v.get("title", "N/A"): VideoData().load(v).to_dict() for v in videos_list}
+                videos: Dict[str, Dict] = {v.get("title", "N/A"): VideoData.load(v).to_dict() for v in videos_list}
                 videos["url"] = url
 
                 with open(path, "w") as file:
