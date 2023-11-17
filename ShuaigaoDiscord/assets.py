@@ -48,10 +48,10 @@ class _AssetsFile:
             os.makedirs(self._path, exist_ok=True)
         return os.listdir(self._path) if suffix else [f.split(".")[0] for f in os.listdir(self._path)]
     
-    def join(self, name):
+    def join(self, *name):
         if self._auto:
             os.makedirs(self._path, exist_ok=True)
-        return os.path.join(self._path, name)
+        return os.path.join(self._path, *name)
 
 
 class User(_AssetsFile):
