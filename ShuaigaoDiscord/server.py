@@ -2,26 +2,30 @@
 import os
 import re
 import json
-import modal
+import userui
+import random
 import engine
 import assets
 import command
+import threading
 import subprocess
 import interactions
 import interactions.ext
-from typing import Dict, List
+from event import *
 from loguru import logger
+from typing import Dict, List
 from decrypt import decrypt_token
 from interactions import OptionType, slash_option
-from interactions import Message, SlashContext, StringSelectMenu, ModalContext
 from interactions.api.events import MessageCreate
+from interactions.api.voice.audio import AudioVolume
+from interactions import Message, SlashContext, StringSelectMenu
 
 logger.info("initializing server...")
 TOKEN: str = decrypt_token()
 bot = interactions.Client(token=TOKEN)
 logined_user: Dict[str, Dict[Dict, List[str]]] = {}
 
-temp: Dict[str, Dict] = dict()
+
 
 def load_config(name):
     def decorator(function):
@@ -63,6 +67,24 @@ async def on_message(event: MessageCreate):
     message: Message = event.message
     logger.info(f"message received: {message.content} from {message.author.username}")
     
+@interactions.slash_command(name="play", description="test now")
+async def play(ctx: SlashContext):
+    v = engine.VideoData("周杰倫 Jay Chou【手寫的從前 Handwritten Past】Official MV", "", 
+                         """這種抒情歌充滿了濃濃的純愛風，以「手寫」來表達校園的初戀，手寫的情書，傳遞的青春的溫度與純粹；令人嚮往；而這首歌最特別的就是第一遍以簡單的鋼琴伴奏，襯著周杰倫輕輕吟唱，彷彿在空盪的校園教室裡，安靜回憶著當時的初戀情景；間奏之後二段主歌截然不同，讓人意想不到，鼓聲一進之後曲風變饒舌，彷彿將時空拉回到初戀現場，那個曾經一起彈琴的公園、糖果店的青澀微甜。""",
+                         )
+    v.image = "https://i.ytimg.com/vi/TMB6-YflpA4/hqdefault.jpg?sqp=-oaymwEcCNACELwBSFXyq4qpAw4IARUAAIhCGAFwAcABBg==&rs=AOn4CLBENbuP3hYg2gK8cvZ_n5VtBugnbw"
+    asset = assets.Assets()
+    server = ctx.guild_id
+    v.duration = "4:55"
+    duration = v.duration.split(":")
+    duration = int(duration[0]) * 60 + int(duration[1])
+    config: Dict = {
+        "music-path": "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/1127926865198321748/temp/周杰倫 Jay Chou【手寫的從前 Handwritten Past】Official MV.mp3",
+        "duration": duration
+    }
+    with open(asset.server(server).join("temp", "playing.json"), "w") as file:
+        json.dump(config, file)
+    await playMusic(ctx, v)
 
 @interactions.slash_command(name="ping", description="测试与服务器的连接")
 @load_config("ping")
@@ -99,9 +121,6 @@ async def ping(ctx: SlashContext, ip: str, frequency: int = 10):
     logger.info(f"end pinged {ip}")
     return rc
 
-
-
-
 @interactions.slash_command(name="playlist", description="列出用户的所有播放列表")
 async def playlist(ctx: SlashContext):
     server_id: str = str(ctx.guild_id)
@@ -131,58 +150,35 @@ async def playlist(ctx: SlashContext):
     # 发送消息并附加选择菜单
     await ctx.send("请选择一个播放列表:", components=select_menu)
 
-@interactions.component_callback(command.select_list)
-async def on_playlist_select(ctx: interactions.ComponentContext):
-    server_id: str = str(ctx.guild_id)
-    user_id: str = str(ctx.author.id)
 
-    server = assets.Assets().server(server_id)
-    # 处理用户的选择
-    selected = ctx.values[0]
-    if selected == command.add_playlist:
-        await ctx.send_modal(modal=modal.PlaylistModal)
-
-        modal_ctx: ModalContext = await ctx.bot.wait_for_modal(modal.PlaylistModal)
-        await modal_ctx.send("创建播放列表完成", ephemeral=True)
-
-        name = modal_ctx.responses[command.list_name]
-        url  = modal_ctx.responses[command.list_url]
-        message: Message = await ctx.send(content="正在导入播放列表...")
-
-        if url:
-            await engine.Youtube.playlist.Import(url, server.user(user_id).join(name + ".json"))
-            download_Button = interactions.Button(
-                style=interactions.ButtonStyle.GREEN,
-                label="下载列表!",
-                custom_id=command.download_list
-            )
-            temp[command.download_list] = url
-            await message.edit(content="播放列表导入完成!重新调用 `/playlist` 来播放音乐\n", components=download_Button)
-    else:
-        musics: List[str] = server.user(user_id).lists(selected)
-        
-@interactions.component_callback(command.download_list)
-async def on_download_list(ctx: interactions.ComponentContext):
-    await ctx.send_modal(modal=modal.CheckVIPModal)
-    modal_ctx: ModalContext = await ctx.bot.wait_for_modal(modal.CheckVIPModal)
-
-    username = modal_ctx.responses[command.vip_username]
-    password = modal_ctx.responses[command.vip_password]
-    await modal_ctx.send("登入成功!", ephemeral=True)
-
+async def playMusic(ctx: SlashContext, video: engine.VideoData):
+    embed = interactions.Embed(
+        title="正在播放: " + video.title,
+        description="介绍: " + video.description,
+        color=random.randint(0, 0xFFFFFF)
+    )
+    embed.set_image(video.image)
     asset = assets.Assets()
-    with open(asset.src.file("VIP.json"), "r") as file:
-        db = json.load(file)
-    if username in db:
-        if password == db[username]:
-            message: Message = await ctx.send(content="正在准备下载中...")
-            await engine.Youtube.playlist.download(message, temp[command.download_list], asset.server(ctx.guild_id).join("temp"))
-            temp.pop(command.download_list)
-        else:
-            await modal_ctx.send("账号或密码错误。", ephemeral=True)
-    else:
-        await modal_ctx.send("账号或密码错误。", ephemeral=True)
+    server = ctx.guild_id
+    with open(asset.server(server).join("temp", "playing.json"), "r") as file:
+        play_data = json.load(file)
+    audio: AudioVolume = AudioVolume(play_data["music-path"])
 
+    if not ctx.voice_state:
+        if ctx.author.voice is None:
+            voice_channels = [channel for channel in ctx.guild.channels if isinstance(channel, interactions.ChannelType.GUILD_VOICE)]
+            channel_names = [interactions.StringSelectOption(label=channel.name, value=channel.name) for channel in voice_channels]
+            choiceUI = StringSelectMenu(*channel_names, placeholder="选择机器人播放音乐的位置", custom_id=command.choose_playchannel)
+            await ctx.send("请选择机器人播放音乐的位置:", components=choiceUI)
+            # TODO when callback join user chice voice channel
+        else:
+            await ctx.author.voice.channel.connect()
+    
+    threading.Thread(target=audio.pre_buffer, args=(4.5, ), daemon=True).start()
+    message = await ctx.send(embeds=embed, components=userui.get_action())
+    
+    await ctx.voice_state.play(audio)
+    await ctx.voice_state.disconnect()
 
 logger.info("starting bot server...")
 bot.start()
