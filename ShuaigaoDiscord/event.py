@@ -17,6 +17,12 @@ from interactions import Message, ModalContext, SlashContext, \
 
 temp: Dict[str, Dict] = dict()
 
+class Quality:
+    Best    = 0
+    High    = 1
+    Middel  = 2
+    Low     = 3
+
 @interactions.component_callback(command.select_list)
 async def on_playlist_select(ctx: interactions.ComponentContext):
     server_id: str = str(ctx.guild_id)
@@ -74,10 +80,14 @@ async def on_download_list(ctx: interactions.ComponentContext):
 
 @interactions.component_callback(command.select_music)
 async def on_select_music_done(ctx: interactions.ComponentContext):
-    # TODO: download results, write playing.json data, set description and images.
-    message: Message = await ctx.send(content="正在下载中，请稍候....")
+    # download results, write playing.json data, set description and images.
     user_id: str = str(ctx.author.id)
     server_id: str = str(ctx.guild_id)
+    
+    message: Message = temp[user_id]["play_message"]
+    await message.edit(content="正在下载中，请稍候....", components=[])
+    
+    
     results: Dict[engine.VideoData] = temp[user_id]["play_result"]
     # free temp
     temp[user_id].pop("play_result")
@@ -96,23 +106,43 @@ async def on_select_music_done(ctx: interactions.ComponentContext):
         logger.error(f"video results: {results}")
         return
     
+    quality: str = temp[str(ctx.author.id)]["play_quality"]
+    try:
+        quality: int = int(quality)
+    except ValueError:
+        quality: int = getattr(Quality, quality)
     # download video, return path
-    path: str = await engine.Youtube.download(video, str(ctx.guild_id))
-    await message.edit(content="正在获取信息中，请稍候...")
-    await video.fill_info()
+    path: str = await engine.Youtube.download(video, str(ctx.guild_id), quality)
+    await message.edit(content="正在获取信息中，请稍候...", components=[])
+    if video.check():
+        await video.fill_info()
     # start write playing.json info
     asset = assets.Assets()
-    end_time: str = str(datetime.timedelta(seconds=video.duration))
-    end_time = end_time.split(":")[1] + ":" + end_time.split(":")[2]
+    if type(video.duration) is int:
+        end_time: str = str(datetime.timedelta(seconds=video.duration))
+        end_time = end_time.split(":")[1] + ":" + end_time.split(":")[2]
+    else:
+        end_time = video.duration
     config: Dict[str, Any] = {
         "music-path": path,
         "duration": end_time,
     }
     with open(asset.server(server_id).join("temp", "playing.json"), "w") as file:
         json.dump(config, file)
-    await play_menu(ctx, message, video)
+    
+    # check and join voice channel
+    if not ctx.voice_state:
+        if ctx.author.voice is None:
+            voice_channels = [channel for channel in ctx.guild.channels if channel.type == interactions.ChannelType.GUILD_VOICE]
+            channel_names = [interactions.StringSelectOption(label=channel.name, value=channel.name) for channel in voice_channels]
+            choiceUI = StringSelectMenu(*channel_names, placeholder="选择机器人播放音乐的位置", custom_id=command.choose_playchannel)
+            temp[str(ctx.author.id)]["select_muisc_args"] = (ctx, message, video)
+            await message.edit(content="请选择机器人播放音乐的位置:", components=choiceUI)
+        else:
+            await ctx.author.voice.channel.connect()
+            await play_menu(ctx, message, video)
         
-async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData, disconnect: bool = True,length: int = 20):
+async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData, disconnect: bool = True, length: int = 20):
     server_id: str = str(ctx.guild_id)
     asset = assets.Assets()
     config_path: str = asset.server(server_id).join("temp", "playing.json")
@@ -120,8 +150,7 @@ async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData
         config = json.load(file)
         
     # here just init, so don't need use variable
-    content: str = "剩余时间: 00:00/" + config["duration"] + " |" + "•" + "━" * (length - 1) + "|\n"
-    content += "介绍: " + video.description
+    content: str = "介绍: " + video.description
     
     color: int = random.randint(0, 0xFFFFFF)
     embed = interactions.Embed(
@@ -131,62 +160,32 @@ async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData
     )
     embed.set_image(video.image[-1]["url"])
     
-    # check and join voice channel
-    if not ctx.voice_state:
-        if ctx.author.voice is None:
-            voice_channels = [channel for channel in ctx.guild.channels if isinstance(channel, interactions.ChannelType.GUILD_VOICE)]
-            channel_names = [interactions.StringSelectOption(label=channel.name, value=channel.name) for channel in voice_channels]
-            choiceUI = StringSelectMenu(*channel_names, placeholder="选择机器人播放音乐的位置", custom_id=command.choose_playchannel)
-            await ctx.send("请选择机器人播放音乐的位置:", components=choiceUI)
-            # TODO when callback join user chice voice channel
-        else:
-            await ctx.author.voice.channel.connect()
-    
     audio = AudioVolume(config["music-path"])
-    audio.pre_buffer(3.5)
-    await message.edit(embeds=embed, components=userui.get_action())
-    temp[ctx.author.id]["play_menu_message"] = message
-    
-    asyncio.get_event_loop().create_task(update_menu_progress(message, length, config, video, color))
-    await ctx.voice_state.play()
+    # audio = await AudioVolume("https://www.youtube.com/watch?v=xVTI5eSzwzQ")
+    audio.pre_buffer(5.5)
+    await message.edit(content="音乐信息:", embeds=embed)
+    if str(ctx.author.id) not in temp:
+        temp[str(ctx.author.id)] = {}
+
+    await ctx.voice_state.play(audio)
     if disconnect:
         await ctx.voice_state.disconnect()
-    
-    
-async def update_menu_progress(message: Message, length: int, config: Dict[str, Any], video: engine.VideoData, color: int):
-    # TODO update menu progress
-    min, sec = config["duration"].split(":")
-    total_sec = int(min) * 60 + int(sec)
-    for cursec in range(1, total_sec + 1):
-        asyncio.sleep(1)
-        progress: int = int((curtime / total_sec) * length)
-        progress_bar: str = "|" + ("━" * (progress - 1) + "•" + "━" * (length - 1 - progress)) + "|"
-        
-        curtime: str = str(datetime.timedelta(seconds=cursec))
-        curtime = curtime.split(":")[1] + ":" + curtime.split(":")[2]
-        
-        content: str = f"剩余时间: {curtime}/" + config["duration"] + " " + progress_bar + "\n"
-        content += "介绍: " + video.description
-        
-        embed = interactions.Embed(
-            title="正在播放: " + video.title,
-            description=content,
-            color=color
-        )
-        embed.set_image(video.image[-1]["url"])
-        
-        await message.edit(embeds=embed, components=userui.get_action())
+
         
         
 @interactions.component_callback(command.choose_playchannel)
 async def on_choose_playchannel(ctx: ComponentContext):
     choose_channel: str = ctx.values[0]
-    voice_channels = [channel for channel in ctx.guild.channels if isinstance(channel, interactions.ChannelType.GUILD_VOICE)]
+    voice_channels = [channel for channel in ctx.guild.channels if channel.type == interactions.ChannelType.GUILD_VOICE]
     channel = None
     for voice_channel in voice_channels:
         if voice_channel.name == choose_channel:
             channel = voice_channel
             break
     await channel.connect()
-    
+    message: Message = temp[str(ctx.author.id)]["select_muisc_args"][1]
+    video: engine.VideoData = temp[str(ctx.author.id)]["select_muisc_args"][2]
+    await message.edit(content=f"已加入 `{channel.name}`")
+    temp[str(ctx.author.id)].pop("select_muisc_args")
+    await play_menu(ctx, message, video)
 

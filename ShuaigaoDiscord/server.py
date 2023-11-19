@@ -2,12 +2,10 @@
 import os
 import re
 import json
-import userui
-import random
+import time
 import engine
 import assets
 import command
-import threading
 import subprocess
 import interactions
 import interactions.ext
@@ -67,13 +65,16 @@ async def on_message(event: MessageCreate):
     message: Message = event.message
     logger.info(f"message received: {message.content} from {message.author.username}")
     
+from interactions.api.voice.audio import AudioVolume
+
 @interactions.slash_command(name="play", description="搜索并播放选择的音乐")
 @load_config("play")
-async def play(ctx: SlashContext, query: str, max_resluts: int = 5):
+async def play(ctx: SlashContext, query: str, max_resluts: int = 5, quality: str = "Best"):
     logger.info(f"start searching {query}, command auother: {ctx.author.username}")
+    message = await ctx.send("正在搜索中......")
     results: List[engine.VideoData] = await engine.Youtube.search(query, max_resluts)
-    names: List[str] = [res.title for res in results]
-    logger.info(f"results: {names}")
+    logger.info(f"results: {results}")
+    names: List[str] = [f"{res.title[:50]} - {res.uploader[:20] if res.uploader else 'Unknown Uploader'}" for res in results]
     select_menu = StringSelectMenu(
         *names,
         placeholder="选择想要播放的音乐",
@@ -83,43 +84,20 @@ async def play(ctx: SlashContext, query: str, max_resluts: int = 5):
     )
     if str(ctx.author.id) not in temp:
         temp[str(ctx.author.id)] = {}
-    temp[str(ctx.author.id)]["play_result"] = results
-    await ctx.send(content="请选择想要播放的音乐:", components=select_menu)
+    temp[str(ctx.author.id)]["play_result"] = {name: video_data for name, video_data in zip(names, results)}
+    temp[str(ctx.author.id)]["play_message"] = message
+    temp[str(ctx.author.id)]["play_quality"] = quality
+    
+    await message.edit(content="请选择想要播放的音乐:", components=select_menu)
 
 @interactions.slash_command(name="ping", description="测试与服务器的连接")
-@load_config("ping")
-async def ping(ctx: SlashContext, ip: str, frequency: int = 10):
-    if not re.match(r"^\d{1,3}(\.\d{1,3}){3}$", ip):
-        await ctx.send("无效的 IP 地址。")
-        logger.error(f"invalid ip address: {ip}")
-        return
+async def ping(ctx: SlashContext):
+    before: float = time.perf_counter()
+    message: Message = await ctx.send(content="正在计算延迟中...")
+    after: float = time.perf_counter()
+    await message.edit(content=f"你与服务器的延迟为 `{round((after - before) * 1000, 2)}ms`")
+    return
     
-    logger.info(f"start pinging {ip}")
-    message = await ctx.send(f"正在向 {ip} 发送ping请求")
-    process = subprocess.Popen(
-        ["ping", "-c", str(frequency), ip],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    # 循环读取输出
-    out = ""
-    while True:
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-        if output:
-            out += output.strip() + "\n"
-
-    rc = process.poll()
-    out += "\nping已结束\nwebsocket 连接延迟: " + str(bot.latency) + "s"
-
-    if len(out) >= 2000:
-        out = out[:2000]
-
-    await message.edit(out)
-    logger.info(f"end pinged {ip}")
-    return rc
 
 @interactions.slash_command(name="playlist", description="列出用户的所有播放列表")
 async def playlist(ctx: SlashContext):
@@ -151,34 +129,6 @@ async def playlist(ctx: SlashContext):
     await ctx.send("请选择一个播放列表:", components=select_menu)
 
 
-async def playMusic(ctx: SlashContext, video: engine.VideoData):
-    embed = interactions.Embed(
-        title="正在播放: " + video.title,
-        description="介绍: " + video.description,
-        color=random.randint(0, 0xFFFFFF)
-    )
-    embed.set_image(video.image[-1]["url"])
-    asset = assets.Assets()
-    server = ctx.guild_id
-    with open(asset.server(server).join("temp", "playing.json"), "r") as file:
-        play_data = json.load(file)
-    audio: AudioVolume = AudioVolume(play_data["music-path"])
-
-    if not ctx.voice_state:
-        if ctx.author.voice is None:
-            voice_channels = [channel for channel in ctx.guild.channels if isinstance(channel, interactions.ChannelType.GUILD_VOICE)]
-            channel_names = [interactions.StringSelectOption(label=channel.name, value=channel.name) for channel in voice_channels]
-            choiceUI = StringSelectMenu(*channel_names, placeholder="选择机器人播放音乐的位置", custom_id=command.choose_playchannel)
-            await ctx.send("请选择机器人播放音乐的位置:", components=choiceUI)
-            # TODO when callback join user chice voice channel
-        else:
-            await ctx.author.voice.channel.connect()
-    
-    audio.pre_buffer(4.5)
-    message = await ctx.send(embeds=embed, components=userui.get_action())
-    
-    await ctx.voice_state.play(audio)
-    await ctx.voice_state.disconnect()
 
 logger.info("starting bot server...")
 bot.start()

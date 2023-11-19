@@ -3,6 +3,7 @@ import re
 import sys
 import time
 import json
+import assets
 import asyncio
 import traceback
 import validators
@@ -18,31 +19,43 @@ class VideoData:
         self.url = url
         self.description = description
         self.image: List[Dict[str, int]] = None
-        self.duration: int = None
+        self.duration: int | str = None
+        self.uploader: str = None
     
-    def load(self, data: Dict) -> "VideoData":
+    def load_data(self, data: Dict) -> "VideoData":
         self.title = data.get("title", "N/A")
-        self.url = data.get("webpage_url", "N/A")
+        self.url = data.get("url", "N/A")
         self.description = data.get("description", "N/A")
         self.image = data.get("thumbnails", "N/A")
         self.duration = data.get("duration_string", "N/A")
+        self.uploader = data.get("uploader", "N/A")
         return self
     
     async def fill_info(self):
         command = ["yt-dlp", "-J", self.url]
         try:
             result = subprocess.check_output(command).decode()
-            data = json.loads(result)
-            self.load(data)
+            data: Dict = json.loads(result)
+            if data.get("entries"):
+                self.load_data(data.get("entries"))
+            else:
+                self.load_data(data)
+                self.duration = self.duration.split(":")
+                self.duration = int(self.duration[0]) * 60 + int(self.duration[1])
             return
         except Exception as e:
             logger.error(e)
             raise e
             
-    
+    def check(self) -> bool:
+        for attr, value in self.__dict__.items():
+            if value is None:
+                return True
+        return False
+
     @staticmethod
     def load(data: Dict) -> "VideoData":
-        return VideoData().load(data)
+        return VideoData().load_data(data)
     
     def __repr__(self):
         return f"<VideoData {self.title} - {self.url}>"
@@ -56,7 +69,8 @@ class VideoData:
             "url": self.url,
             "description": self.description,
             "image": self.image,
-            "duration": self.duration
+            "duration": self.duration,
+            "uploader": self.uploader
         }
 
 
@@ -76,10 +90,9 @@ class Youtube(SearchEngine):
         # https://www.youtube.com/watch?v=fuM1aVCGR8c&list=RDfuM1aVCGR8c&start_radio=1
         try:
             result = subprocess.check_output(command).decode()
-            videos: List[Dict] = [json.loads(line) for line in result.splitlines()]
-            simplified_results: List[VideoData] = []
-            for video in videos:
-                simplified_results.append(VideoData.load(video))
+            data: Dict = json.loads(result)
+            videos: List[Dict] = data.get("entries", [])
+            simplified_results: List[VideoData] = [VideoData.load(video) for video in videos]
             return simplified_results
         except Exception as error:
             logger.error(error)
@@ -88,7 +101,7 @@ class Youtube(SearchEngine):
             logger.info(f"Searching for '{query}' took {time.perf_counter() - start_time:.2f}s")
 
     @staticmethod
-    async def download(video: VideoData, server: str) -> str: # return path
+    async def download(video: VideoData, server: str, quality: int) -> str: # return path
         if not validators.url(video.url):
             logger.error(f"{video.url} is not a real url")
             return ""
@@ -97,12 +110,42 @@ class Youtube(SearchEngine):
         download_path = os.path.join(root, "src", "servers", server, "temp", video.title + ".mp3")
         os.makedirs(os.path.dirname(download_path), exist_ok=True)
         
-        
-        command = [
-            "yt-dlp", "-f", "bestaudio",
-            "--external-downloader", "aria2c",
-            "-o", download_path, video.url
-        ]
+        if quality != 0:
+            command = ["yt-dlp", "-F", video.url]
+            try:
+                result = subprocess.run(command, stdout=subprocess.PIPE, text=True)
+                lines = result.stdout.split('\n')
+                audio_formats = []
+                for line in lines:
+                    if "audio only" in line:
+                        fields = line.split()
+                        format_code = fields[0]
+                        bitrate_str = re.search(r'\d+k', line)
+                        bitrate = int(bitrate_str.group()[:-1]) if bitrate_str else 0
+                        audio_formats.append((format_code, bitrate))
+
+                audio_formats.sort(key=lambda x: x[1], reverse=True)
+                format_code = audio_formats[quality][0] if len(audio_formats) > 1 else audio_formats[0][0]
+            except Exception as error:
+                logger.error(error)
+                return
+
+            
+            command = [
+                "yt-dlp", "-f", format_code,
+                "--external-downloader", "aria2c",
+                "-o", download_path, video.url
+            ]
+        else:
+            command = [
+                "yt-dlp", "-f", "bestaudio",
+                "--external-downloader", "aria2c",
+                "-o", download_path, video.url
+            ]
+
+        asset = assets.Assets()
+        if video.title.strip(".mp3") in os.listdir(asset.server(server).join("temp")):
+            return asset.server(server).join("temp", video.title + ".mp3")
         
         start_time = time.perf_counter()
         try:
@@ -206,7 +249,8 @@ class Youtube(SearchEngine):
                 stdout, stderr = await process.communicate()
                 if stderr:
                     raise Exception(stderr.decode(code))
-                videos_list: List[Dict] = [json.loads(line) for line in stdout.decode(code).splitlines()]
+                data: Dict = json.loads(stdout.decode(code))
+                videos_list: List[Dict] = data.get("entries", [])
                 videos: Dict[str, Dict] = {v.get("title", "N/A"): VideoData.load(v).to_dict() for v in videos_list}
                 videos["url"] = url
 

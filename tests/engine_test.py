@@ -15,7 +15,11 @@ async def main():
     # files = await engine.Youtube.playlist.download(ctxTest(), "https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", "081932", "3218952")
     # print(files)
     # print(len(files))
-    await engine.Youtube.playlist.Import("https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", 
-                                         "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/12345/laogao/JayChou.json")
+    # await engine.Youtube.playlist.Import("https://www.youtube.com/playlist?list=PLTZI-S6ZpPkFTzE-X2JOec-56IWGDSPoj", 
+    #                                      "/home/laogao/Project/ShuaigaoDiscord/ShuaigaoDiscord/src/servers/12345/laogao/JayChou.json")
+    results = await engine.Youtube.search("Justin Bieber - Baby ft. Ludacris")
+    print(results)
+    video: engine.VideoData = results[0]
+    print(video.to_dict())
 
 asyncio.run(main())

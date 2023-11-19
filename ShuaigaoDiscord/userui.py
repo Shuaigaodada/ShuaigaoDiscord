@@ -1,6 +1,7 @@
 import interactions
 
-play_status = "▶︎ 播放"
+play_status = "⏸ 播放"
+# "▶︎ 播放"
 play_order = "🔁 顺序播放"
 def get_row1():
     return [

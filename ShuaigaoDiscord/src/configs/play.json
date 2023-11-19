@@ -6,8 +6,7 @@
             "required": true,
             "opt_type": "STRING",
             "max_length": 100,
-            "min_length": 1,
-            "autocomplete": true
+            "min_length": 1
         },
         {
             "name": "max_results",
@@ -16,6 +15,14 @@
             "opt_type": "INTEGER",
             "max_value": 10,
             "min_value": 1
+        },
+        {
+            "name": "quality",
+            "description": "下载的音质",
+            "required": false,
+            "opt_type": "STRING",
+            "max_length": 100,
+            "min_length": 1
         }
     ]
 }
