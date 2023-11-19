@@ -22,7 +22,22 @@
             "required": false,
             "opt_type": "STRING",
             "max_length": 100,
-            "min_length": 1
+            "min_length": 1,
+            "autocomplete": true
+        },
+        {
+            "name": "disconnect",
+            "description": "在播放完后是否退出频道",
+            "required": false,
+            "opt_type": "BOOLEAN"
+        },
+        {
+            "name": "pre_buffer",
+            "description": "预加载的时长",
+            "required": false,
+            "opt_type": "NUMBER",
+            "min_value": 3,
+            "max_value": 30
         }
     ]
 }
