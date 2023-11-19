@@ -65,14 +65,13 @@ async def on_message(event: MessageCreate):
     message: Message = event.message
     logger.info(f"message received: {message.content} from {message.author.username}")
     
-from interactions.api.voice.audio import AudioVolume
 
 @interactions.slash_command(name="play", description="搜索并播放选择的音乐")
 @load_config("play")
-async def play(ctx: SlashContext, query: str, max_resluts: int = 5, quality: str = "Best"):
+async def play(ctx: SlashContext, query: str, max_results: int = 5, quality: str = "Best", disconnect: bool = False, pre_buffer: float = 6.5):
     logger.info(f"start searching {query}, command auother: {ctx.author.username}")
     message = await ctx.send("正在搜索中......")
-    results: List[engine.VideoData] = await engine.Youtube.search(query, max_resluts)
+    results: List[engine.VideoData] = await engine.Youtube.search(query, max_results)
     logger.info(f"results: {results}")
     names: List[str] = [f"{res.title[:50]} - {res.uploader[:20] if res.uploader else 'Unknown Uploader'}" for res in results]
     select_menu = StringSelectMenu(
@@ -87,6 +86,8 @@ async def play(ctx: SlashContext, query: str, max_resluts: int = 5, quality: str
     temp[str(ctx.author.id)]["play_result"] = {name: video_data for name, video_data in zip(names, results)}
     temp[str(ctx.author.id)]["play_message"] = message
     temp[str(ctx.author.id)]["play_quality"] = quality
+    temp[str(ctx.author.id)]["play_disconnect"] = disconnect
+    temp[str(ctx.author.id)]["play_pre_buffer"] = pre_buffer
     
     await message.edit(content="请选择想要播放的音乐:", components=select_menu)
 
@@ -129,7 +130,14 @@ async def playlist(ctx: SlashContext):
     await ctx.send("请选择一个播放列表:", components=select_menu)
 
 
+async def choose_quality(ctx: interactions.AutocompleteContext):
+    user_input = ctx.input_text
+    suggestions = [name for name in dir(Quality) if not name.startswith("__")]
+    filtered_suggestions = [s for s in suggestions if user_input.lower() in s.lower()]
+    await ctx.send(choices=[interactions.SlashCommandChoice(name=s, value=s) for s in filtered_suggestions])
 
+
+play.autocomplete("quality")(choose_quality)
 logger.info("starting bot server...")
 bot.start()
 logger.info("server is stop")
