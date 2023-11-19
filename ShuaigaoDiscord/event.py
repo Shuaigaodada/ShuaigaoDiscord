@@ -107,6 +107,7 @@ async def on_select_music_done(ctx: interactions.ComponentContext):
         return
     
     quality: str = temp[str(ctx.author.id)]["play_quality"]
+    temp[str(ctx.author.id)].pop("play_quality")
     try:
         quality: int = int(quality)
     except ValueError:
@@ -142,13 +143,17 @@ async def on_select_music_done(ctx: interactions.ComponentContext):
             await ctx.author.voice.channel.connect()
             await play_menu(ctx, message, video)
         
-async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData, disconnect: bool = True, length: int = 20):
+async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData):
     server_id: str = str(ctx.guild_id)
     asset = assets.Assets()
     config_path: str = asset.server(server_id).join("temp", "playing.json")
     with open(config_path, "r") as file:
         config = json.load(file)
         
+    disconnect: bool = temp[str(ctx.author.id)]["play_disconnect"]
+    pre_buffer: float = temp[str(ctx.author.id)]["play_pre_buffer"]
+    temp[str(ctx.author.id)].pop("play_disconnect")
+    temp[str(ctx.author.id)].pop("play_pre_buffer")
     # here just init, so don't need use variable
     content: str = "介绍: " + video.description
     
@@ -160,18 +165,18 @@ async def play_menu(ctx: SlashContext, message: Message, video: engine.VideoData
     )
     embed.set_image(video.image[-1]["url"])
     
-    audio = AudioVolume(config["music-path"])
-    # audio = await AudioVolume("https://www.youtube.com/watch?v=xVTI5eSzwzQ")
-    audio.pre_buffer(5.5)
-    await message.edit(content="音乐信息:", embeds=embed)
-    if str(ctx.author.id) not in temp:
-        temp[str(ctx.author.id)] = {}
+    temp[str(ctx.author.id)]["play_menu_embed"] = embed
 
+    audio = AudioVolume(config["music-path"])
+    audio.pre_buffer(pre_buffer)
+
+
+    await message.edit(content="音乐信息:", embeds=embed, components=userui.get_action())
+    temp[str(ctx.author.id)].pop("play_message")
     await ctx.voice_state.play(audio)
     if disconnect:
         await ctx.voice_state.disconnect()
 
-        
         
 @interactions.component_callback(command.choose_playchannel)
 async def on_choose_playchannel(ctx: ComponentContext):
@@ -189,3 +194,19 @@ async def on_choose_playchannel(ctx: ComponentContext):
     temp[str(ctx.author.id)].pop("select_muisc_args")
     await play_menu(ctx, message, video)
 
+
+@interactions.component_callback(command.stop_play)
+async def on_stop_play(ctx: interactions.ComponentContext):
+    ctx.voice_state.pause()
+    user_id: str = str(ctx.author.id)
+    userui.change_status("▶ 播放", command.continue_play)
+    embed: interactions.Embed = temp[user_id]["play_menu_embed"]
+    await ctx.send(content="音乐信息:", embed=embed, components=userui.get_action())
+    
+@interactions.component_callback(command.continue_play)
+async def on_continue_play(ctx: interactions.ComponentContext):
+    ctx.voice_state.resume()
+    user_id: str = str(ctx.author.id)
+    userui.change_status("⏸ 播放", command.stop_play)
+    embed: interactions.Embed = temp[user_id]["play_menu_embed"]
+    await ctx.send(content="音乐信息:", embed=embed, components=userui.get_action())
